@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- 外部通信(fetch / XHR / WebSocket)を禁止。入力内容が端末の外へ出ないことをブラウザ側で保証します -->
+  <meta http-equiv="Content-Security-Policy" content="connect-src 'none'; form-action 'none'">
+  <title>前タレ工房 | 記者会見用 前タレ作成</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">前</span>
+    <div>
+      <h1>前タレ工房</h1>
+      <p>入力内容は端末内だけで処理され、送信されません</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button id="themeBtn" class="btn ghost" type="button" aria-label="表示モードを切り替え">ダークモード</button>
+    <button id="pdfAllBtn" class="btn primary" type="button">全員分をPDF出力</button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- 左: 名簿 -->
+  <section class="panel panel-list" aria-labelledby="listTitle">
+    <div class="panel-head">
+      <h2 id="listTitle">登壇者リスト</h2>
+      <span id="countBadge" class="badge">0名</span>
+    </div>
+
+    <div id="dropZone" class="drop">
+      <div>
+        <strong>CSVを読み込む</strong>
+        <span>ここにドロップ、またはファイルを選択</span>
+      </div>
+      <div class="drop-btns">
+        <label class="btn" for="csvInput">ファイルを選択</label>
+        <button id="sampleBtn" class="btn ghost" type="button">サンプルCSV</button>
+      </div>
+      <input id="csvInput" type="file" accept=".csv,.tsv,.txt,text/csv" hidden>
+      <p class="hint">1行目に「名前」「肩書き」「所属」の見出しがあれば自動で振り分けます。見出しがない場合は 名前, 肩書き, 所属 の順とみなします。UTF-8 / Shift_JIS に対応。</p>
+    </div>
+
+    <ol id="slipList" class="slips"></ol>
+
+    <div class="list-actions">
+      <button id="addBtn" class="btn" type="button">行を追加</button>
+      <button id="clearBtn" class="btn ghost danger" type="button">すべて削除</button>
+    </div>
+  </section>
+
+  <!-- 中央: プレビュー -->
+  <section class="stage" aria-label="プレビュー">
+    <div class="stage-bar">
+      <div class="pager">
+        <button id="prevBtn" class="icon" type="button" aria-label="前へ">‹</button>
+        <span id="pageInfo">1 / 1</span>
+        <button id="nextBtn" class="icon" type="button" aria-label="次へ">›</button>
+      </div>
+      <label class="toggle-inline">
+        <input id="dragMode" type="checkbox">
+        <span>プレビュー上でドラッグ移動</span>
+      </label>
+    </div>
+
+    <div id="stageBox" class="stage-box">
+      <canvas id="preview" aria-label="前タレのプレビュー"></canvas>
+    </div>
+
+    <div class="stage-foot">
+      <span id="paperInfo" class="muted"></span>
+      <button id="pdfOneBtn" class="btn" type="button">表示中の1枚をPDF出力</button>
+    </div>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <!-- 右: 設定 -->
+  <section class="panel panel-style" aria-labelledby="styleTitle">
+    <div class="panel-head">
+      <h2 id="styleTitle">レイアウト設定</h2>
+    </div>
+
+    <details class="card" open>
+      <summary>用紙・全体</summary>
+      <div class="grid">
+        <label class="ctl">用紙サイズ
+          <select data-path="page.size">
+            <option value="A2">A2</option>
+            <option value="A3">A3</option>
+            <option value="A4">A4</option>
+            <option value="A5">A5</option>
+            <option value="B3">B3</option>
+            <option value="B4">B4</option>
+            <option value="B5">B5</option>
+            <option value="custom">カスタム (mm)</option>
+          </select>
+        </label>
+        <label class="ctl">向き
+          <select data-path="page.orient">
+            <option value="portrait">縦</option>
+            <option value="landscape">横</option>
+          </select>
+        </label>
+
+        <div id="customSize" class="ctl wide two" hidden>
+          <label>幅 (mm)<input type="number" min="50" max="2000" step="1" data-path="page.customW"></label>
+          <label>高さ (mm)<input type="number" min="50" max="2000" step="1" data-path="page.customH"></label>
+        </div>
+
+        <label class="ctl">背景色<input type="color" data-path="page.bg"></label>
+        <label class="ctl">文字色<input type="color" data-path="page.fg"></label>
+
+        <label class="check wide"><input type="checkbox" data-path="autoFit"><span>はみ出す文字を自動で縮小する</span></label>
+        <label class="check wide"><input type="checkbox" data-path="scaleOnPaperChange"><span>用紙を変えたら文字サイズも比例して調整する</span></label>
+        <label class="check wide"><input type="checkbox" data-path="page.border"><span>枠線を付ける</span></label>
+
+        <label class="ctl">枠線の太さ (mm)<input type="number" min="0.2" max="20" step="0.1" data-path="page.borderWidth"></label>
+        <label class="ctl">枠線の余白 (mm)<input type="number" min="0" max="100" step="1" data-path="page.borderInset"></label>
+      </div>
+    </details>
+
+    <div id="fieldCards"></div>
+
+    <details class="card">
+      <summary>フォント・出力</summary>
+      <div class="grid">
+        <div class="ctl wide">
+          端末のフォントファイルを追加
+          <label class="btn" for="fontInput">フォントを選択 (.ttf .otf .woff)</label>
+          <input id="fontInput" type="file" accept=".ttf,.otf,.woff,.woff2" hidden>
+          <small class="hint">端末にあるフォントを読み込みます。アップロードはされません。ページを開き直すと再度の追加が必要です。</small>
+        </div>
+        <label class="ctl wide">PDFの解像度
+          <select data-path="dpi" data-number>
+            <option value="150">150 dpi (軽い)</option>
+            <option value="200">200 dpi (標準)</option>
+            <option value="300">300 dpi (高精細・重い)</option>
+          </select>
+        </label>
+        <label class="check wide"><input type="checkbox" data-path="persistSlips"><span>登壇者リストもこの端末に保存する</span></label>
+        <small class="hint wide">レイアウト設定はこの端末のブラウザにのみ保存されます。共用PCでは上のチェックを外したままにしてください。</small>
+        <button id="resetBtn" class="btn ghost danger wide" type="button">設定を初期化して保存データを削除</button>
+      </div>
+    </details>
+  </section>
+
+</main>
+
+<script src="csv.js"></script>
+<script src="renderer.js"></script>
+<script src="pdf.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
